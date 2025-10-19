@@ -643,6 +643,28 @@ canvas {
     return false;
   }
 
+  // --- Helper: hat die Deko Boden unter sich? (für vertikales Level 6) ---
+  function hasSolidGroundBelow(x, y, maxDropPx = 48, level = currentLevel) {
+    const lvl = level || currentLevel;
+    if (!lvl) return false;
+    const minY = y;
+    const maxY = y + maxDropPx;
+    const solids = (lvl.platforms || []).concat(lvl.cloudBlocks || []);
+    for (const solid of solids) {
+      const left = typeof solid.left === 'number' ? solid.left : (solid.x ?? 0);
+      const right = typeof solid.right === 'number' ? solid.right : ((solid.x ?? 0) + (solid.w ?? 0));
+      const top = typeof solid.top === 'number' ? solid.top : (solid.y ?? 0);
+      if (top >= minY && top <= maxY && x >= left - 4 && x <= right + 4) {
+        return true;
+      }
+    }
+    const groundY = lvl.groundY ?? null;
+    if (groundY !== null && groundY >= minY && groundY <= maxY) {
+      return true;
+    }
+    return false;
+  }
+
   function createLivingBackground() {
     return {
       sky() {
