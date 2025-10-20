@@ -645,6 +645,73 @@ canvas {
     return false;
   }
 
+  // --- Helper: hat die Deko Boden unter sich? (für vertikales Level 6) ---
+  function hasSolidGroundBelow(x, y, maxDropPx = 48, level = currentLevel) {
+    const lvl = level || currentLevel;
+    if (!lvl) return false;
+    const minY = y;
+    const maxY = y + maxDropPx;
+    const solids = (lvl.platforms || []).concat(lvl.cloudBlocks || []);
+    for (const solid of solids) {
+      const left = typeof solid.left === 'number' ? solid.left : (solid.x ?? 0);
+      const right = typeof solid.right === 'number' ? solid.right : ((solid.x ?? 0) + (solid.w ?? 0));
+      const top = typeof solid.top === 'number' ? solid.top : (solid.y ?? 0);
+      if (top >= minY && top <= maxY && x >= left - 4 && x <= right + 4) {
+        return true;
+      }
+    }
+    const allowFallback = !!lvl?.allowFallbackGround;
+    const groundY = allowFallback ? (lvl.groundY ?? null) : null;
+    if (groundY !== null && groundY >= minY && groundY <= maxY) {
+      return true;
+    }
+    return false;
+  }
+
+  // --- Helper: hat die Deko Boden unter sich? (für vertikales Level 6) ---
+  function hasSolidGroundBelow(x, y, maxDropPx = 48, level = currentLevel) {
+    const lvl = level || currentLevel;
+    if (!lvl) return false;
+    const minY = y;
+    const maxY = y + maxDropPx;
+    const solids = (lvl.platforms || []).concat(lvl.cloudBlocks || []);
+    for (const solid of solids) {
+      const left = typeof solid.left === 'number' ? solid.left : (solid.x ?? 0);
+      const right = typeof solid.right === 'number' ? solid.right : ((solid.x ?? 0) + (solid.w ?? 0));
+      const top = typeof solid.top === 'number' ? solid.top : (solid.y ?? 0);
+      if (top >= minY && top <= maxY && x >= left - 4 && x <= right + 4) {
+        return true;
+      }
+    }
+    const groundY = lvl.groundY ?? null;
+    if (groundY !== null && groundY >= minY && groundY <= maxY) {
+      return true;
+    }
+    return false;
+  }
+
+  // --- Helper: hat die Deko Boden unter sich? (für vertikales Level 6) ---
+  function hasSolidGroundBelow(x, y, maxDropPx = 48, level = currentLevel) {
+    const lvl = level || currentLevel;
+    if (!lvl) return false;
+    const minY = y;
+    const maxY = y + maxDropPx;
+    const solids = (lvl.platforms || []).concat(lvl.cloudBlocks || []);
+    for (const solid of solids) {
+      const left = typeof solid.left === 'number' ? solid.left : (solid.x ?? 0);
+      const right = typeof solid.right === 'number' ? solid.right : ((solid.x ?? 0) + (solid.w ?? 0));
+      const top = typeof solid.top === 'number' ? solid.top : (solid.y ?? 0);
+      if (top >= minY && top <= maxY && x >= left - 4 && x <= right + 4) {
+        return true;
+      }
+    }
+    const groundY = lvl.groundY ?? null;
+    if (groundY !== null && groundY >= minY && groundY <= maxY) {
+      return true;
+    }
+    return false;
+  }
+
   function createLivingBackground() {
     return {
       sky() {
@@ -3793,6 +3860,23 @@ canvas {
     if (index === 0) return true;
     if (!progress.tutorialDone) return false;
     return !!progress.unlocked[index];
+  }
+
+  function lockLevelAfterGameOver() {
+    const total = levels.length;
+    const idx = typeof currentLevelIndex === 'number' ? currentLevelIndex : -1;
+    if (idx <= 0 || idx >= total) {
+      overworldSelection = Math.max(0, overworldSelection || 0);
+      persistProgress();
+      return;
+    }
+    progress.unlocked[idx] = false;
+    let fallback = idx - 1;
+    while (fallback > 0 && !progress.unlocked[fallback]) {
+      fallback--;
+    }
+    overworldSelection = Math.max(0, fallback);
+    persistProgress();
   }
 
   function lockLevelAfterGameOver() {
