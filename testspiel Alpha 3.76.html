@@ -683,6 +683,29 @@ canvas {
         return true;
       }
     }
+    const allowFallback = !!lvl?.allowFallbackGround;
+    const groundY = allowFallback ? (lvl.groundY ?? null) : null;
+    if (groundY !== null && groundY >= minY && groundY <= maxY) {
+      return true;
+    }
+    return false;
+  }
+
+  // --- Helper: hat die Deko Boden unter sich? (für vertikales Level 6) ---
+  function hasSolidGroundBelow(x, y, maxDropPx = 48, level = currentLevel) {
+    const lvl = level || currentLevel;
+    if (!lvl) return false;
+    const minY = y;
+    const maxY = y + maxDropPx;
+    const solids = (lvl.platforms || []).concat(lvl.cloudBlocks || []);
+    for (const solid of solids) {
+      const left = typeof solid.left === 'number' ? solid.left : (solid.x ?? 0);
+      const right = typeof solid.right === 'number' ? solid.right : ((solid.x ?? 0) + (solid.w ?? 0));
+      const top = typeof solid.top === 'number' ? solid.top : (solid.y ?? 0);
+      if (top >= minY && top <= maxY && x >= left - 4 && x <= right + 4) {
+        return true;
+      }
+    }
     const groundY = lvl.groundY ?? null;
     if (groundY !== null && groundY >= minY && groundY <= maxY) {
       return true;
@@ -3817,6 +3840,17 @@ canvas {
 
   function syncKillProgressFlags() {
     ensureProgressShape();
+    let changed = false;
+    const countLedger = entry => {
+      if (!entry || typeof entry !== 'object') return 0;
+      let tally = 0;
+      if (Array.isArray(entry.slots) && entry.slots.length) {
+        entry.slots.forEach(flag => { if (flag) tally++; });
+      }
+      if (entry.boss) tally++;
+      if (entry.extra) tally += entry.extra;
+      return tally;
+    };
     levels.forEach((lvl, idx) => {
       const total = lvl ? (lvl.totalEnemies ?? (lvl.enemyBlueprints.length + (lvl.bossType ? 1 : 0))) : 0;
       let ledgerEntry = progress.killLedger[idx];
@@ -3825,33 +3859,53 @@ canvas {
         progress.killLedger[idx] = ledgerEntry;
       }
       if (!Array.isArray(ledgerEntry.slots)) ledgerEntry.slots = [];
-      let ledgerCount = 0;
-      if (ledgerEntry.slots.length) {
-        ledgerEntry.slots.forEach(entry => { if (entry) ledgerCount++; });
+      let ledgerCount = countLedger(ledgerEntry);
+      let recorded = progress.killsPerLevel[idx] ?? 0;
+
+      if (lvl && progress.enemyClears[idx] && total > 0 && recorded < total) {
+        recorded = progress.killsPerLevel[idx] = total;
+        changed = true;
+        for (let i = 0; i < lvl.enemyBlueprints.length; i++) {
+          if (!ledgerEntry.slots[i]) {
+            ledgerEntry.slots[i] = true;
+            changed = true;
+          }
+        }
+        if (lvl.bossType && !ledgerEntry.boss) {
+          ledgerEntry.boss = true;
+          changed = true;
+        }
+        ledgerCount = countLedger(ledgerEntry);
       }
-      if (ledgerEntry.boss) ledgerCount++;
-      if (ledgerEntry.extra) ledgerCount += ledgerEntry.extra;
-      const recorded = progress.killsPerLevel[idx] ?? 0;
+
       if (lvl && ledgerCount < recorded) {
         const needed = Math.min(recorded, lvl.enemyBlueprints.length + (lvl.bossType ? 1 : 0));
         for (let i = 0; i < lvl.enemyBlueprints.length && ledgerCount < needed; i++) {
           if (!ledgerEntry.slots[i]) {
             ledgerEntry.slots[i] = true;
             ledgerCount++;
+            changed = true;
           }
         }
         if (ledgerCount < needed && lvl.bossType && !ledgerEntry.boss) {
           ledgerEntry.boss = true;
           ledgerCount++;
+          changed = true;
         }
       }
-      if ((progress.killsPerLevel[idx] ?? 0) < ledgerCount) {
+
+      if (recorded < ledgerCount) {
         progress.killsPerLevel[idx] = ledgerCount;
+        recorded = ledgerCount;
+        changed = true;
       }
-      if (total > 0 && (progress.killsPerLevel[idx] ?? 0) >= total) {
+
+      if (total > 0 && recorded >= total && !progress.enemyClears[idx]) {
         progress.enemyClears[idx] = true;
+        changed = true;
       }
     });
+    if (changed) persistProgress();
   }
 
   syncKillProgressFlags();
@@ -3860,6 +3914,23 @@ canvas {
     if (index === 0) return true;
     if (!progress.tutorialDone) return false;
     return !!progress.unlocked[index];
+  }
+
+  function lockLevelAfterGameOver() {
+    const total = levels.length;
+    const idx = typeof currentLevelIndex === 'number' ? currentLevelIndex : -1;
+    if (idx <= 0 || idx >= total) {
+      overworldSelection = Math.max(0, overworldSelection || 0);
+      persistProgress();
+      return;
+    }
+    progress.unlocked[idx] = false;
+    let fallback = idx - 1;
+    while (fallback > 0 && !progress.unlocked[fallback]) {
+      fallback--;
+    }
+    overworldSelection = Math.max(0, fallback);
+    persistProgress();
   }
 
   function lockLevelAfterGameOver() {
