@@ -660,6 +660,29 @@ canvas {
         return true;
       }
     }
+    const allowFallback = !!lvl?.allowFallbackGround;
+    const groundY = allowFallback ? (lvl.groundY ?? null) : null;
+    if (groundY !== null && groundY >= minY && groundY <= maxY) {
+      return true;
+    }
+    return false;
+  }
+
+  // --- Helper: hat die Deko Boden unter sich? (für vertikales Level 6) ---
+  function hasSolidGroundBelow(x, y, maxDropPx = 48, level = currentLevel) {
+    const lvl = level || currentLevel;
+    if (!lvl) return false;
+    const minY = y;
+    const maxY = y + maxDropPx;
+    const solids = (lvl.platforms || []).concat(lvl.cloudBlocks || []);
+    for (const solid of solids) {
+      const left = typeof solid.left === 'number' ? solid.left : (solid.x ?? 0);
+      const right = typeof solid.right === 'number' ? solid.right : ((solid.x ?? 0) + (solid.w ?? 0));
+      const top = typeof solid.top === 'number' ? solid.top : (solid.y ?? 0);
+      if (top >= minY && top <= maxY && x >= left - 4 && x <= right + 4) {
+        return true;
+      }
+    }
     const groundY = lvl.groundY ?? null;
     if (groundY !== null && groundY >= minY && groundY <= maxY) {
       return true;
@@ -1315,6 +1338,22 @@ canvas {
       result.unlocked = [true].concat(result.unlocked);
       if (Array.isArray(result.bestTimes)) result.bestTimes = [null].concat(result.bestTimes);
       if (Array.isArray(result.enemyClears)) result.enemyClears = [false].concat(result.enemyClears);
+      if (Array.isArray(result.killsPerLevel)) result.killsPerLevel = [0].concat(result.killsPerLevel);
+      if (Array.isArray(result.killLedger)) {
+        result.killLedger = [{ slots: [], boss: false, extra: 0 }].concat(result.killLedger.map(entry => {
+          if (entry && typeof entry === 'object') {
+            return {
+              slots: Array.isArray(entry.slots) ? entry.slots.slice() : (Array.isArray(entry) ? entry.slice() : []),
+              boss: !!entry.boss,
+              extra: Number.isFinite(entry.extra) ? entry.extra : 0
+            };
+          }
+          if (Array.isArray(entry)) {
+            return { slots: entry.slice(), boss: false, extra: 0 };
+          }
+          return { slots: [], boss: false, extra: 0 };
+        }));
+      }
     }
     if (typeof result.tutorialDone !== 'boolean') {
       let done = false;
@@ -1328,6 +1367,28 @@ canvas {
       }
       result.tutorialDone = done;
     }
+    if (!Array.isArray(result.killsPerLevel)) {
+      const len = Array.isArray(result.unlocked) ? result.unlocked.length : 7;
+      result.killsPerLevel = new Array(len).fill(0);
+    }
+    if (!Array.isArray(result.killLedger)) {
+      const len = Array.isArray(result.unlocked) ? result.unlocked.length : 7;
+      result.killLedger = Array.from({ length: len }, () => ({ slots: [], boss: false, extra: 0 }));
+    } else {
+      result.killLedger = result.killLedger.map(entry => {
+        if (entry && typeof entry === 'object') {
+          return {
+            slots: Array.isArray(entry.slots) ? entry.slots.slice() : (Array.isArray(entry) ? entry.slice() : []),
+            boss: !!entry.boss,
+            extra: Number.isFinite(entry.extra) ? entry.extra : 0
+          };
+        }
+        if (Array.isArray(entry)) {
+          return { slots: entry.slice(), boss: false, extra: 0 };
+        }
+        return { slots: [], boss: false, extra: 0 };
+      });
+    }
     return result;
   }
 
@@ -1336,6 +1397,8 @@ canvas {
     unlocked: [true, false, false, false, false, false, false],
     bestTimes: [null, null, null, null, null, null, null],
     enemyClears: [false, false, false, false, false, false, false],
+    killsPerLevel: [0, 0, 0, 0, 0, 0, 0], // hinzugefügt: persistente Kill-Zählung pro Level
+    killLedger: [],
     bossDefeated: false,
     seenIntro: false,
     tutorialDone: false,
@@ -1378,6 +1441,8 @@ canvas {
       unlocked: [true, false, false, false, false, false, false],
       bestTimes: [null, null, null, null, null, null, null],
       enemyClears: [false, false, false, false, false, false, false],
+      killsPerLevel: [0, 0, 0, 0, 0, 0, 0],
+      killLedger: [],
       bossDefeated: false,
       seenIntro: false,
       tutorialDone: false,
@@ -2205,18 +2270,19 @@ canvas {
       if (!this.stunned) return false;
       this.hp--;
       playSfx('bossHit');
-      if (this.hp <= 0) {
-        this.state = 'defeated';
-        this.stateTimer = Infinity;
-        this.stunned = false;
-        if (!this.defeatCounted) {
-          player.kills++;
+        if (this.hp <= 0) {
+          this.state = 'defeated';
+          this.stateTimer = Infinity;
+          this.stunned = false;
+          if (!this.defeatCounted) {
           this.defeatCounted = true;
+          player.kills++;
+          creditKillProgress(currentLevelIndex, null, true);
+          }
+        } else {
+          this.state = 'fling';
+          this.stateTimer = 2.5;
         }
-      } else {
-        this.state = 'fling';
-        this.stateTimer = 2.5;
-      }
       return true;
     }
     draw(cam) {
@@ -2331,18 +2397,19 @@ canvas {
       if (!this.stunned) return false;
       this.hp--;
       playSfx('bossHit');
-      if (this.hp <= 0) {
-        this.state = 'defeated';
-        this.stateTimer = Infinity;
-        this.stunned = false;
-        if (!this.defeatCounted) {
-          player.kills++;
+        if (this.hp <= 0) {
+          this.state = 'defeated';
+          this.stateTimer = Infinity;
+          this.stunned = false;
+          if (!this.defeatCounted) {
           this.defeatCounted = true;
-        }
-        level.suction = 0;
-      } else {
-        this.state = 'idle';
-        this.stateTimer = 3;
+          player.kills++;
+          creditKillProgress(currentLevelIndex, null, true);
+          }
+          level.suction = 0;
+        } else {
+          this.state = 'idle';
+          this.stateTimer = 3;
         if (this.hp <= 5) this.phase = 2;
       }
       return true;
@@ -2463,8 +2530,9 @@ canvas {
         this.vy = 0;
         this.y = this.baseY;
         if (!this.defeatCounted) {
-          player.kills++;
-          this.defeatCounted = true;
+        this.defeatCounted = true;
+        player.kills++;
+        creditKillProgress(currentLevelIndex, null, true);
         }
       } else {
         this.state = 'hover';
@@ -2532,7 +2600,8 @@ canvas {
       this.height = config.height || (this.groundY + HEIGHT);
       this.vertical = !!config.vertical;
       this.platforms = config.platforms.map(p => new Platform(...p));
-      this.enemyBlueprints = config.enemies.map(e => ({
+      this.enemyBlueprints = config.enemies.map((e, idx) => ({
+        index: idx,
         x: e[0], y: e[1], w: e[2], h: e[3], type: e[4], props: Object.assign({}, e[5]||{})
       }));
       this.enemies = [];
@@ -2552,6 +2621,7 @@ canvas {
       this.bubbleFlows = this.bubbleBlueprints.map(b => Object.assign({}, b));
       this.bossType = config.bossType || null;
       this.bossConfig = config.bossConfig || null;
+      this.totalEnemies = this.enemyBlueprints.length + (this.bossType ? 1 : 0);
       this.boss = null;
       this.killCounter = { sinceDrop: 0, nextDrop: randInt(2,5) };
       this.timer = LEVEL_TIME;
@@ -2568,7 +2638,11 @@ canvas {
       this._loggedOverlayMessage = false;
       this._loggedGroundY = undefined;
       this.platforms.forEach(p => { p._loggedDraw = false; });
-      this.enemies = this.enemyBlueprints.map(e => new Enemy(e.x, e.y, e.w, e.h, e.type, e.props));
+      this.enemies = this.enemyBlueprints.map((e, idx) => {
+        const enemy = new Enemy(e.x, e.y, e.w, e.h, e.type, e.props);
+        enemy.blueprintIndex = e.index ?? idx;
+        return enemy;
+      });
       this.items = this.itemSpawns.map(spawn => {
         const drop = new ItemDrop(spawn.type, spawn.x, spawn.y, { vx: 0, vy: 0 });
         drop.timer = 9999;
@@ -3232,12 +3306,13 @@ canvas {
         [640, HEIGHT-170, 60, 170, {}],
         [720, HEIGHT-200, 140, 30, { bouncy:true, bouncePower: 610 }],
         [880, HEIGHT-260, 150, 30, {}],
+        [910, HEIGHT-210, 120, 28, {}], // hinzugefügt: sichere Absprungfläche für Tutorial-Stomp
         [1060, HEIGHT-200, 160, 30, {}],
         [1180, HEIGHT-50, 260, 50, {}]
       ],
       cloudBlocks: [[900, HEIGHT-360]],
       enemies: [
-        [960, HEIGHT-150, 50, 40, 'taco', { range: 80, spawnX:960, spawnY:HEIGHT-150 }]
+        [940, HEIGHT-140, 50, 40, 'taco', { range: 70, spawnX:940, spawnY:HEIGHT-140 }]
       ],
       items: [
         ['cookie', 1120, HEIGHT-180]
@@ -3261,7 +3336,7 @@ canvas {
       width: 2600,
       groundY: HEIGHT-70,
       platforms: [
-        [0, HEIGHT-52, 320, 52, {}],
+        [0, HEIGHT-52, 360, 52, {}],
         [420, HEIGHT-64, 220, 64, {}],
         [740, HEIGHT-58, 220, 58, {}],
         [1040, HEIGHT-62, 220, 62, {}],
@@ -3282,7 +3357,7 @@ canvas {
       ],
       cloudBlocks: [[860, 270]],
       enemies: [
-        [210, HEIGHT-120, 50, 40, 'taco', { range: 110, spawnX:210, spawnY:HEIGHT-120 }],
+        [260, HEIGHT-120, 50, 40, 'taco', { range: 150, spawnX:260, spawnY:HEIGHT-120 }], // erweitert: erste Patrouille gut stompbar
         [530, HEIGHT-140, 50, 40, 'taco', { range: 110, spawnX:530, spawnY:HEIGHT-140 }],
         [900, 280, 48, 48, 'jelly', { baseY: 280, phase: 0.4 }],
         [1180, 290, 48, 48, 'jelly', { baseY: 290, phase: 1.0 }],
@@ -3612,6 +3687,24 @@ canvas {
     progress.unlocked = extend(progress.unlocked, false);
     progress.bestTimes = extend(progress.bestTimes, null);
     progress.enemyClears = extend(progress.enemyClears, false);
+    progress.killsPerLevel = extend(progress.killsPerLevel, 0);
+    if (!Array.isArray(progress.killLedger)) progress.killLedger = [];
+    progress.killLedger = progress.killLedger.slice(0, total).map(entry => {
+      if (entry && typeof entry === 'object' && Array.isArray(entry.slots)) {
+        return {
+          slots: entry.slots.slice(),
+          boss: !!entry.boss,
+          extra: Number.isFinite(entry.extra) ? entry.extra : 0
+        };
+      }
+      if (Array.isArray(entry)) {
+        return { slots: entry.slice(), boss: false, extra: 0 };
+      }
+      return { slots: [], boss: false, extra: 0 };
+    });
+    while (progress.killLedger.length < total) {
+      progress.killLedger.push({ slots: [], boss: false, extra: 0 });
+    }
     if (!Array.isArray(progress.unlocked)) progress.unlocked = new Array(total).fill(false);
     progress.unlocked[0] = true;
     if (typeof progress.tutorialDone !== 'boolean') {
@@ -3659,10 +3752,131 @@ canvas {
 
   ensureProgressShape();
 
+  // hinzugefügt für persistente Freischaltung: Kill-Kredite sofort speichern und Clears prüfen
+  function creditKillProgress(levelIndex, blueprintIndex = null, isBoss = false) {
+    if (!Number.isInteger(levelIndex) || levelIndex < 0) return false;
+    ensureProgressShape();
+    if (!Array.isArray(progress.killsPerLevel)) {
+      progress.killsPerLevel = new Array(levels.length).fill(0);
+    }
+    if (progress.killsPerLevel[levelIndex] == null) {
+      progress.killsPerLevel[levelIndex] = 0;
+    }
+    if (!Array.isArray(progress.killLedger)) progress.killLedger = [];
+    while (progress.killLedger.length <= levelIndex) {
+      progress.killLedger.push({ slots: [], boss: false, extra: 0 });
+    }
+    if (!progress.killLedger[levelIndex] || typeof progress.killLedger[levelIndex] !== 'object') {
+      progress.killLedger[levelIndex] = { slots: [], boss: false, extra: 0 };
+    }
+    const ledger = progress.killLedger[levelIndex];
+    if (!Array.isArray(ledger.slots)) ledger.slots = [];
+    let credited = false;
+    let changed = false;
+    if (isBoss) {
+      if (ledger.boss) return false;
+      ledger.boss = true;
+      credited = true;
+      changed = true;
+    } else if (blueprintIndex != null) {
+      if (ledger.slots[blueprintIndex]) return false;
+      ledger.slots[blueprintIndex] = true;
+      credited = true;
+      changed = true;
+    } else {
+      credited = true;
+      ledger.extra = (ledger.extra || 0) + 1;
+      changed = true;
+    }
+    if (!credited) return false;
+    const countFromLedger = () => {
+      let count = 0;
+      if (Array.isArray(ledger.slots)) {
+        ledger.slots.forEach(entry => { if (entry) count++; });
+      }
+      if (ledger.boss) count++;
+      if (ledger.extra) count += ledger.extra;
+      return count;
+    };
+    const totalFromLedger = countFromLedger();
+    const levelRef = levels[levelIndex];
+    const totalEnemies = levelRef ? (levelRef.totalEnemies ?? (levelRef.enemyBlueprints.length + (levelRef.bossType ? 1 : 0))) : 0;
+    if (totalFromLedger > progress.killsPerLevel[levelIndex]) {
+      progress.killsPerLevel[levelIndex] = totalFromLedger;
+      changed = true;
+    }
+    if (totalEnemies > 0 && progress.killsPerLevel[levelIndex] >= totalEnemies) {
+      if (!progress.enemyClears[levelIndex]) {
+        progress.enemyClears[levelIndex] = true;
+        changed = true;
+      }
+    }
+    if (changed) persistProgress();
+    return changed;
+  }
+
+  function syncKillProgressFlags() {
+    ensureProgressShape();
+    levels.forEach((lvl, idx) => {
+      const total = lvl ? (lvl.totalEnemies ?? (lvl.enemyBlueprints.length + (lvl.bossType ? 1 : 0))) : 0;
+      let ledgerEntry = progress.killLedger[idx];
+      if (!ledgerEntry || typeof ledgerEntry !== 'object') {
+        ledgerEntry = { slots: [], boss: false, extra: 0 };
+        progress.killLedger[idx] = ledgerEntry;
+      }
+      if (!Array.isArray(ledgerEntry.slots)) ledgerEntry.slots = [];
+      let ledgerCount = 0;
+      if (ledgerEntry.slots.length) {
+        ledgerEntry.slots.forEach(entry => { if (entry) ledgerCount++; });
+      }
+      if (ledgerEntry.boss) ledgerCount++;
+      if (ledgerEntry.extra) ledgerCount += ledgerEntry.extra;
+      const recorded = progress.killsPerLevel[idx] ?? 0;
+      if (lvl && ledgerCount < recorded) {
+        const needed = Math.min(recorded, lvl.enemyBlueprints.length + (lvl.bossType ? 1 : 0));
+        for (let i = 0; i < lvl.enemyBlueprints.length && ledgerCount < needed; i++) {
+          if (!ledgerEntry.slots[i]) {
+            ledgerEntry.slots[i] = true;
+            ledgerCount++;
+          }
+        }
+        if (ledgerCount < needed && lvl.bossType && !ledgerEntry.boss) {
+          ledgerEntry.boss = true;
+          ledgerCount++;
+        }
+      }
+      if ((progress.killsPerLevel[idx] ?? 0) < ledgerCount) {
+        progress.killsPerLevel[idx] = ledgerCount;
+      }
+      if (total > 0 && (progress.killsPerLevel[idx] ?? 0) >= total) {
+        progress.enemyClears[idx] = true;
+      }
+    });
+  }
+
+  syncKillProgressFlags();
+
   function doorUnlocked(index) {
     if (index === 0) return true;
     if (!progress.tutorialDone) return false;
     return !!progress.unlocked[index];
+  }
+
+  function lockLevelAfterGameOver() {
+    const total = levels.length;
+    const idx = typeof currentLevelIndex === 'number' ? currentLevelIndex : -1;
+    if (idx <= 0 || idx >= total) {
+      overworldSelection = Math.max(0, overworldSelection || 0);
+      persistProgress();
+      return;
+    }
+    progress.unlocked[idx] = false;
+    let fallback = idx - 1;
+    while (fallback > 0 && !progress.unlocked[fallback]) {
+      fallback--;
+    }
+    overworldSelection = Math.max(0, fallback);
+    persistProgress();
   }
 
   function lockLevelAfterGameOver() {
@@ -3717,6 +3931,7 @@ canvas {
     if (hud) hud.style.display = 'none';
     currentLevel = null;
     paused = false;
+    syncKillProgressFlags();
     const lastIndex = levels.length - 1;
     if (lastIndex >= 0 && !progress.unlocked[lastIndex]) {
       const clearsNeeded = progress.enemyClears.slice(0, lastIndex).every(Boolean);
@@ -4674,9 +4889,12 @@ canvas {
     if (currentLevelIndex === levels.length - 2) {
       progress.zitronellaLives = clampLives(progress.frogLives);
     }
-    const totalEnemies = currentLevel.enemyBlueprints.length + (currentLevel.boss ? 1 : 0);
-    if (!progress.enemyClears[currentLevelIndex] && player.kills >= totalEnemies) {
-      progress.enemyClears[currentLevelIndex] = true;
+    const totalEnemies = currentLevel.totalEnemies ?? (currentLevel.enemyBlueprints.length + (currentLevel.boss ? 1 : 0));
+    if (!progress.enemyClears[currentLevelIndex]) {
+      const creditedKills = progress.killsPerLevel[currentLevelIndex] ?? 0;
+      if (totalEnemies > 0 && creditedKills >= totalEnemies) {
+        progress.enemyClears[currentLevelIndex] = true;
+      }
     }
 
     if (currentLevel?.bossType === 'ruehrix') {
@@ -5107,7 +5325,11 @@ canvas {
         if (player.vy > 60 && playerBottom - player.vy*playerDt <= enemyTop) {
           enemy.alive = false;
           player.stompBounce();
-          player.kills++;
+          if (!enemy.progressKillCredited) {
+            enemy.progressKillCredited = true;
+            player.kills++;
+            creditKillProgress(currentLevelIndex, enemy.blueprintIndex ?? null);
+          }
           level.rollDrop(enemy);
           tutorialMark('stomp');
         } else {
