@@ -1,0 +1,67 @@
+{
+  "achievements": [
+    {
+      "id": "day_1",
+      "displayName": "Bergkristall-Medaille",
+      "medalName": "Bergkristall-Medaille",
+      "description": "Erreiche 1 Tag.",
+      "daysRequired": 1
+    },
+    {
+      "id": "week_1",
+      "displayName": "Edelaragonit-Medaille",
+      "medalName": "Edelaragonit-Medaille",
+      "description": "Erreiche 7 Tage.",
+      "daysRequired": 7
+    },
+    {
+      "id": "month_1",
+      "displayName": "Achat-Medaille",
+      "medalName": "Achat-Medaille",
+      "description": "Erreiche 30 Tage.",
+      "daysRequired": 30
+    },
+    {
+      "id": "year_1",
+      "displayName": "Chrysokoll-Medaille",
+      "medalName": "Chrysokoll-Medaille",
+      "description": "Erreiche 365 Tage.",
+      "daysRequired": 365
+    },
+    {
+      "id": "year_2",
+      "displayName": "Fluoridgrün-Medaille",
+      "medalName": "Fluoridgrün-Medaille",
+      "description": "Erreiche 730 Tage.",
+      "daysRequired": 730
+    },
+    {
+      "id": "year_3",
+      "displayName": "Fluoridblau-Medaille",
+      "medalName": "Fluoridblau-Medaille",
+      "description": "Erreiche 1095 Tage.",
+      "daysRequired": 1095
+    },
+    {
+      "id": "year_4",
+      "displayName": "Bronzemedaille",
+      "medalName": "Bronzemedaille",
+      "description": "Erreiche 1460 Tage.",
+      "daysRequired": 1460
+    },
+    {
+      "id": "year_8",
+      "displayName": "Silbermedaille",
+      "medalName": "Silbermedaille",
+      "description": "Erreiche 2920 Tage.",
+      "daysRequired": 2920
+    },
+    {
+      "id": "year_10",
+      "displayName": "Goldmedaille",
+      "medalName": "Goldmedaille",
+      "description": "Erreiche 3650 Tage.",
+      "daysRequired": 3650
+    }
+  ]
+}
